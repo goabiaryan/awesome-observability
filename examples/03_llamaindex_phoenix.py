@@ -1,81 +1,43 @@
-"""
-Example 3: LlamaIndex with Arize Phoenix Evaluation & Drift Detection
-
-This example shows:
-- LlamaIndex RAG with vector store
-- Phoenix-based drift detection
-- Embedding monitoring
-- RAGAS evaluation for RAG quality
-"""
-
 import os
 import logging
 from typing import List
+import time
 
-# LlamaIndex
 from llama_index.core import VectorStoreIndex, Document, Settings
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.llms.openai import OpenAI
 
-# Phoenix & Arize
 try:
     import phoenix as px
     from arize_phoenix.trace.langchain import PhoenixCallbackHandler
 except ImportError:
     print("Install Arize Phoenix: pip install arize-phoenix")
 
-# Observability
-from observability import instrument_openai
-from eval_utils import evaluate_rag_with_ragas
+from src.observability import instrument_openai
+from src.eval_utils import evaluate_rag_with_ragas
 
-# Setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 instrument_openai()
 
-# ============================================================================
-# Configuration
-# ============================================================================
-
-# Use OpenAI embeddings
 from llama_index.embeddings.openai import OpenAIEmbedding
 
-# ============================================================================
-# Phoenix Setup
-# ============================================================================
 
 def setup_phoenix():
-    """Initialize Phoenix for tracing & evaluation"""
     try:
-        # Launch Phoenix app
         px.launch_app()
         logger.info("Phoenix app launched at http://localhost:6006")
-        
-        # Phoenix will automatically track:
-        # - Token usage
-        # - Latency
-        # - Retrieval quality
-        # - Embeddings for drift detection
         return True
     except Exception as e:
         logger.warning(f"Phoenix setup failed: {e}")
         return False
 
-# ============================================================================
-# RAG Pipeline with Phoenix
-# ============================================================================
 
 class LlamaIndexRAG:
-    """LlamaIndex RAG with Phoenix monitoring"""
-    
     def __init__(self):
-        """Initialize RAG pipeline"""
-        
-        # Setup Phoenix callback
         self.phoenix_handler = PhoenixCallbackHandler()
         
-        # Configure LlamaIndex
         Settings.llm = OpenAI(
             model="gpt-4",
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -87,10 +49,8 @@ class LlamaIndexRAG:
             api_key=os.getenv("OPENAI_API_KEY")
         )
         
-        # Create sample documents
         documents = self._create_sample_documents()
         
-        # Build index
         self.index = VectorStoreIndex.from_documents(
             documents,
             show_progress=True
@@ -99,7 +59,6 @@ class LlamaIndexRAG:
         logger.info(f"RAG index created with {len(documents)} documents")
     
     def _create_sample_documents(self) -> List[Document]:
-        """Create sample documents for RAG"""
         docs = [
             Document(
                 text="RAG (Retrieval Augmented Generation) is a technique that combines "
@@ -127,19 +86,8 @@ class LlamaIndexRAG:
         return docs
     
     async def query(self, question: str, eval_enabled: bool = True) -> dict:
-        """Query RAG with optional evaluation
-        
-        Args:
-            question: User question
-            eval_enabled: Whether to run evaluation metrics
-        
-        Returns:
-            Dict with answer, contexts, and evaluation scores
-        """
-        import time
         start_time = time.time()
         
-        # Query with Phoenix callback
         query_engine = self.index.as_query_engine(
             similarity_top_k=3,
             callbacks=[self.phoenix_handler]
@@ -147,7 +95,6 @@ class LlamaIndexRAG:
         
         response = query_engine.query(question)
         
-        # Extract contexts
         contexts = [node.get_content() for node in response.source_nodes]
         answer = str(response)
         
@@ -161,7 +108,6 @@ class LlamaIndexRAG:
             "num_sources": len(contexts)
         }
         
-        # Optional: Evaluate with RAGAS
         if eval_enabled:
             try:
                 eval_scores = await evaluate_rag_with_ragas(
@@ -179,21 +125,8 @@ class LlamaIndexRAG:
         
         return result
 
-# ============================================================================
-# Batch Evaluation for Drift Detection
-# ============================================================================
 
 async def monitor_for_drift(rag: LlamaIndexRAG, num_queries: int = 20):
-    """
-    Run multiple queries to detect embedding drift
-    
-    Phoenix automatically tracks:
-    - Embedding distributions over time
-    - Token usage patterns
-    - Retrieval quality changes
-    - Response latency trends
-    """
-    
     test_queries = [
         "What is RAG?",
         "How does RAG prevent hallucinations?",
@@ -217,21 +150,13 @@ async def monitor_for_drift(rag: LlamaIndexRAG, num_queries: int = 20):
     logger.info("Drift detection complete. Check Phoenix UI for insights:")
     logger.info("http://localhost:6006")
 
-# ============================================================================
-# Usage
-# ============================================================================
 
 async def main():
-    """Example usage"""
-    
-    # Setup Phoenix
     setup_phoenix()
     
-    # Initialize RAG
     logger.info("Initializing LlamaIndex RAG...")
     rag = LlamaIndexRAG()
     
-    # Test queries
     test_queries = [
         "What is RAG and how does it work?",
         "Can RAG prevent hallucinations?",
@@ -258,7 +183,6 @@ async def main():
             print(f"Faithfulness: {evals.get('faithfulness', 0):.2f}")
             print(f"Answer Relevancy: {evals.get('answer_relevancy', 0):.2f}")
     
-    # Optional: Monitor for drift
     print("\n" + "="*70)
     print("Running drift detection (20 queries)...")
     print("="*70)
@@ -271,9 +195,6 @@ async def main():
     print("- Response latency analysis")
     print("\nhttp://localhost:6006")
 
-# ============================================================================
-# Run
-# ============================================================================
 
 if __name__ == "__main__":
     import asyncio

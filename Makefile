@@ -50,7 +50,7 @@ install:
 
 setup:
 	@echo "Setting up environment..."
-	@test -f .env && echo "✓ .env already exists" || (cp configs/.env.template .env && echo "✓ Created .env from template")
+	@test -f .env && echo "✓ .env already exists" || (cp deploy/.env.template .env && echo "✓ Created .env from template")
 	@echo ""
 	@echo "⚠️  Please edit .env with your API keys:"
 	@echo "   OPENAI_API_KEY=sk-..."
@@ -70,7 +70,7 @@ venv:
 
 start:
 	@echo "Starting services..."
-	docker-compose up -d
+	docker-compose -f deploy/docker-compose.yml up -d
 	@echo "✓ Services started"
 	@echo ""
 	@echo "Waiting for services to be ready..."
@@ -79,27 +79,27 @@ start:
 
 stop:
 	@echo "Stopping services..."
-	docker-compose stop
+	docker-compose -f deploy/docker-compose.yml stop
 	@echo "✓ Services stopped"
 
 restart: stop start
 
 logs:
 	@echo "Showing live logs (Ctrl+C to exit)..."
-	docker-compose logs -f
+	docker-compose -f deploy/docker-compose.yml logs -f
 
 logs-langfuse:
-	docker-compose logs -f langfuse
+	docker-compose -f deploy/docker-compose.yml logs -f langfuse
 
 logs-prometheus:
-	docker-compose logs -f prometheus
+	docker-compose -f deploy/docker-compose.yml logs -f prometheus
 
 logs-grafana:
-	docker-compose logs -f grafana
+	docker-compose -f deploy/docker-compose.yml logs -f grafana
 
 status:
 	@echo "Service Status:"
-	@docker-compose ps
+	@docker-compose -f deploy/docker-compose.yml ps
 
 health:
 	@echo "Checking service health..."
@@ -111,12 +111,12 @@ health:
 	@echo -n "Grafana: "
 	@curl -s http://localhost:3001/api/health > /dev/null && echo "✓ Running" || echo "✗ Down"
 	@echo -n "PostgreSQL: "
-	@docker-compose exec -T postgres pg_isready -U langfuse > /dev/null 2>&1 && echo "✓ Running" || echo "✗ Down"
+	@docker-compose -f deploy/docker-compose.yml exec -T postgres pg_isready -U langfuse > /dev/null 2>&1 && echo "✓ Running" || echo "✗ Down"
 	@echo ""
 
 clean:
 	@echo "Cleaning up containers and volumes..."
-	@docker-compose down -v
+	@docker-compose -f deploy/docker-compose.yml down -v
 	@echo "✓ Cleanup complete"
 
 # ============================================================================
@@ -130,11 +130,11 @@ test:
 
 test-observability:
 	@echo "Testing observability module..."
-	python -c "from observability import create_langfuse_client; client = create_langfuse_client(); print('✓ Observability ready')"
+	python -c "from src.observability import create_langfuse_client; client = create_langfuse_client(); print('✓ Observability ready')"
 
 test-eval:
 	@echo "Testing evaluation module..."
-	python -c "from eval_utils import EvalPipeline; p = EvalPipeline(['hallucination']); print('✓ Evaluation ready')"
+	python -c "from src.eval_utils import EvalPipeline; p = EvalPipeline(['hallucination']); print('✓ Evaluation ready')"
 
 test-all: test-observability test-eval
 	@echo "✓ All modules ready"
@@ -165,17 +165,17 @@ run-example4:
 
 db-shell:
 	@echo "Opening PostgreSQL shell..."
-	docker-compose exec postgres psql -U langfuse -d langfuse
+	docker-compose -f deploy/docker-compose.yml exec postgres psql -U langfuse -d langfuse
 
 db-migrate:
 	@echo "Running database migrations..."
-	docker-compose exec langfuse npm run migrate
+	docker-compose -f deploy/docker-compose.yml exec langfuse npm run migrate
 	@echo "✓ Migrations complete"
 
 db-reset:
 	@echo "Resetting database..."
-	docker-compose down -v postgres
-	docker-compose up -d postgres
+	docker-compose -f deploy/docker-compose.yml down -v postgres
+	docker-compose -f deploy/docker-compose.yml up -d postgres
 	@echo "✓ Database reset"
 
 # ============================================================================
@@ -224,7 +224,7 @@ lint:
 
 type-check:
 	@echo "Type checking..."
-	mypy observability.py eval_utils.py
+	mypy src/observability.py src/eval_utils.py
 	@echo "✓ Type check complete"
 
 quality: format lint type-check test-all
@@ -238,9 +238,9 @@ docs:
 	@echo "Opening documentation..."
 	@echo ""
 	@echo "Quick References:"
-	@echo "  - Setup Guide: cat SETUP.md"
-	@echo "  - Quick Start: cat QUICKSTART.md"
-	@echo "  - Deployment: cat DEPLOYMENT.md"
+	@echo "  - Setup Guide: cat docs/SETUP.md"
+	@echo "  - Quick Start: cat docs/QUICKSTART.md"
+	@echo "  - Deployment: cat docs/DEPLOYMENT.md"
 	@echo ""
 	@echo "Resource Links:"
 	@echo "  - Langfuse Docs: https://langfuse.com/docs"
@@ -257,7 +257,7 @@ readme:
 
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t llm-observability:latest .
+	docker build -f deploy/Dockerfile -t llm-observability:latest .
 	@echo "✓ Image built"
 
 docker-push:
@@ -291,14 +291,14 @@ serve:
 
 backup:
 	@echo "Backing up PostgreSQL..."
-	docker-compose exec -T postgres pg_dump -U langfuse langfuse > backup_$(shell date +%Y%m%d_%H%M%S).sql
+	docker-compose -f deploy/docker-compose.yml exec -T postgres pg_dump -U langfuse langfuse > backup_$(shell date +%Y%m%d_%H%M%S).sql
 	@echo "✓ Backup created"
 
 restore:
 	@echo "Restoring PostgreSQL from backup..."
 	@echo "Usage: make restore BACKUP=backup_20240101_000000.sql"
 	ifdef BACKUP
-		docker-compose exec -T postgres psql -U langfuse langfuse < $(BACKUP)
+		docker-compose -f deploy/docker-compose.yml exec -T postgres psql -U langfuse langfuse < $(BACKUP)
 		@echo "✓ Restore complete"
 	endif
 
@@ -323,7 +323,7 @@ troubleshoot:
 	@python --version
 	@echo ""
 	@echo "Running Services:"
-	@docker-compose ps
+	@docker-compose -f deploy/docker-compose.yml ps
 	@echo ""
 	@echo "Service Logs:"
 	@echo "  make logs              # All services"

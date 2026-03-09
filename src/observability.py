@@ -1,14 +1,3 @@
-"""
-LLM Observability Module
-Provides unified interface for tracing, evaluation, and monitoring across multiple backends.
-
-Usage:
-    from observability import create_langfuse_client, instrument_openai
-    
-    client = create_langfuse_client()
-    instrument_openai()  # Auto-trace OpenAI calls
-"""
-
 import os
 import json
 import time
@@ -22,15 +11,11 @@ import openai
 from dotenv import load_dotenv
 from prometheus_client import Counter, Histogram, Gauge
 
-# Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
-# ============================================================================
-# Metrics (Prometheus)
-# ============================================================================
 
 llm_requests = Counter("llm_requests_total", "Total LLM requests", ["model", "endpoint"])
 llm_tokens = Counter("llm_tokens_total", "Total tokens used", ["model", "type"])
@@ -41,29 +26,21 @@ llm_hallucination_score = Gauge("llm_hallucination_score", "Hallucination score 
 llm_answer_relevancy = Gauge("llm_answer_relevancy_score", "Answer relevancy (0-1)", ["request_id"])
 llm_quality_gate_pass_rate = Gauge("llm_quality_gate_pass_rate", "Quality gate pass rate", ["metric"])
 
-# ============================================================================
-# Enums
-# ============================================================================
 
 class TracingBackend(Enum):
-    """Supported tracing backends"""
     LANGFUSE = "langfuse"
     PHOENIX = "phoenix"
     HELICONE = "helicone"
     OTEL = "otel"
 
+
 class EvalFramework(Enum):
-    """Supported evaluation frameworks"""
     DEEPEVAL = "deepeval"
     RAGAS = "ragas"
     TRULENS = "trulens"
 
-# ============================================================================
-# Langfuse Client Wrapper
-# ============================================================================
 
 class LangfuseObservability:
-    """Langfuse integration for LLM observability"""
     
     def __init__(self, host: Optional[str] = None):
         try:
@@ -87,18 +64,13 @@ class LangfuseObservability:
         )
     
     def trace_langchain(self):
-        """Return LangChain callback handler for tracing"""
         from langfuse.callback_handler import CallbackHandler
         return CallbackHandler()
     
     def trace_llamaindex(self):
-        """Return LlamaIndex callback handler"""
-        # LlamaIndex integrates via: llama_index.callbacks import CallbackManager
-        # Then: callback_manager.add_handler(langfuse_handler)
         pass
     
     def create_trace(self, name: str, user_id: Optional[str] = None, metadata: Optional[Dict] = None):
-        """Create a new trace"""
         return self.client.trace(
             name=name,
             user_id=user_id,
@@ -106,19 +78,13 @@ class LangfuseObservability:
         )
     
     def log_message(self, trace_id: str, message: str, level: str = "info"):
-        """Log a message to a trace"""
         logger.log(level.upper(), f"[{trace_id}] {message}")
     
     def flush(self):
-        """Flush pending events"""
         self.client.flush()
 
-# ============================================================================
-# Phoenix Client Wrapper
-# ============================================================================
 
 class PhoenixObservability:
-    """Arize Phoenix integration for evaluation & drift detection"""
     
     def __init__(self):
         try:
@@ -130,7 +96,6 @@ class PhoenixObservability:
         self.client = None
     
     def start_server(self, port: int = 6006):
-        """Start Phoenix evaluation server"""
         try:
             self.client = self.px.launch_app()
             logger.info(f"Phoenix server running at http://localhost:{port}")
@@ -138,21 +103,13 @@ class PhoenixObservability:
             logger.warning(f"Phoenix server already running or error: {e}")
     
     def create_evaluation_dataset(self, data: List[Dict]):
-        """Create evaluation dataset"""
-        # Implementation depends on Phoenix version
         pass
     
     def track_embedding_drift(self, embeddings: List[List[float]]):
-        """Track embedding drift over time"""
-        # Uses internal drift detection algorithms
         pass
 
-# ============================================================================
-# Helicone Client Wrapper
-# ============================================================================
 
 class HeliconeObservability:
-    """Helicone integration for cost & latency tracking"""
     
     def __init__(self):
         self.api_key = os.getenv("HELICONE_API_KEY")
@@ -160,21 +117,13 @@ class HeliconeObservability:
             raise ValueError("Set HELICONE_API_KEY env var")
     
     def enable_proxy(self):
-        """Enable Helicone as OpenAI proxy"""
-        # Helicone uses OpenAI API with proxy headers
         logger.info("Helicone proxy enabled. Ensure OPENAI_API_KEY is set.")
     
     def get_analytics(self, limit: int = 100):
-        """Fetch cost/latency analytics from Helicone"""
-        # Would call Helicone API
         logger.info(f"Fetching analytics for last {limit} requests from Helicone")
 
-# ============================================================================
-# OpenTelemetry Instrumentation
-# ============================================================================
 
 class OTelObservability:
-    """OpenTelemetry-based instrumentation"""
     
     def __init__(self, service_name: str = "llm-app"):
         try:
@@ -191,25 +140,18 @@ class OTelObservability:
         self.tracer = trace.get_tracer(__name__)
     
     def instrument_openai(self):
-        """Instrument OpenAI SDK with OTel"""
         from opentelemetry.instrumentation.openai import OpenAIInstrumentor
         OpenAIInstrumentor().instrument()
         logger.info("OpenAI SDK instrumented with OpenTelemetry")
     
     def instrument_langchain(self):
-        """Instrument LangChain with OTel"""
         from opentelemetry.instrumentation.langchain import LangChainInstrumentor
         LangChainInstrumentor().instrument()
         logger.info("LangChain instrumented with OpenTelemetry")
 
-# ============================================================================
-# Cost Tracking
-# ============================================================================
 
 class CostTracker:
-    """Track LLM costs across models"""
     
-    # 2026 pricing (OpenAI, Anthropic)
     PRICING = {
         "gpt-4-turbo": {"input": 0.00003, "output": 0.0001},
         "gpt-4": {"input": 0.00003, "output": 0.0001},
@@ -221,7 +163,6 @@ class CostTracker:
     
     @staticmethod
     def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost for a request"""
         if model not in CostTracker.PRICING:
             logger.warning(f"Unknown model {model}, assuming GPT-3.5-turbo pricing")
             model = "gpt-3.5-turbo"
@@ -232,26 +173,10 @@ class CostTracker:
     
     @staticmethod
     def format_cost(cost: float) -> str:
-        """Format cost for display"""
         return f"${cost:.6f}"
 
-# ============================================================================
-# OpenAI Instrumentation
-# ============================================================================
 
 def instrument_openai(backend: TracingBackend = TracingBackend.LANGFUSE):
-    """Auto-instrument OpenAI calls with tracing
-    
-    Args:
-        backend: Tracing backend to use
-    
-    Example:
-        instrument_openai()
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": "Hello"}]
-        )
-    """
     original_create = openai.ChatCompletion.create
     
     @wraps(original_create)
@@ -261,7 +186,6 @@ def instrument_openai(backend: TracingBackend = TracingBackend.LANGFUSE):
         try:
             response = original_create(*args, **kwargs)
             
-            # Track metrics
             model = kwargs.get("model", "unknown")
             if "usage" in response:
                 input_tokens = response["usage"].get("prompt_tokens", 0)
@@ -290,12 +214,8 @@ def instrument_openai(backend: TracingBackend = TracingBackend.LANGFUSE):
     openai.ChatCompletion.create = traced_create
     logger.info("OpenAI calls instrumented with automatic tracing")
 
-# ============================================================================
-# Main Observability Client
-# ============================================================================
 
 class LLMObservability:
-    """Unified observability client supporting multiple backends"""
     
     def __init__(
         self,
@@ -303,24 +223,15 @@ class LLMObservability:
         auto_eval: bool = True,
         eval_framework: str = "deepeval"
     ):
-        """Initialize observability
-        
-        Args:
-            tracing_backend: "langfuse" | "phoenix" | "helicone" | "otel"
-            auto_eval: Enable automatic evaluation
-            eval_framework: "deepeval" | "ragas" | "trulens"
-        """
         self.tracing_backend = TracingBackend(tracing_backend)
         self.eval_framework = EvalFramework(eval_framework)
         self.auto_eval = auto_eval
         
-        # Initialize backends
         self._init_tracing()
         if auto_eval:
             self._init_evaluation()
     
     def _init_tracing(self):
-        """Initialize tracing backend"""
         if self.tracing_backend == TracingBackend.LANGFUSE:
             self.tracer = LangfuseObservability()
             logger.info("Langfuse tracing initialized")
@@ -338,7 +249,6 @@ class LLMObservability:
             logger.info("OpenTelemetry tracing initialized")
     
     def _init_evaluation(self):
-        """Initialize evaluation framework"""
         if self.eval_framework == EvalFramework.DEEPEVAL:
             logger.info("DeepEval evaluation initialized")
         elif self.eval_framework == EvalFramework.RAGAS:
@@ -347,7 +257,6 @@ class LLMObservability:
             logger.info("TruLens evaluation initialized")
     
     def trace(self, name: str, metadata: Optional[Dict] = None):
-        """Create a traced function/block"""
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs):
@@ -365,7 +274,6 @@ class LLMObservability:
         return decorator
     
     def log_event(self, event_name: str, event_data: Dict):
-        """Log observability event"""
         event = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": event_name,
@@ -374,40 +282,20 @@ class LLMObservability:
         logger.info(json.dumps(event))
     
     def flush(self):
-        """Flush pending events"""
         if hasattr(self.tracer, 'flush'):
             self.tracer.flush()
             logger.info("Flushed pending observability events")
 
-# ============================================================================
-# Factory Functions
-# ============================================================================
 
 def create_langfuse_client() -> LangfuseObservability:
-    """Create Langfuse client
-    
-    Example:
-        client = create_langfuse_client()
-        trace = client.create_trace("my_trace")
-    """
     return LangfuseObservability()
 
+
 def create_observability_client(backend: str = "langfuse") -> LLMObservability:
-    """Create observability client for given backend"""
     return LLMObservability(tracing_backend=backend)
 
-# ============================================================================
-# Decorators for Easy Integration
-# ============================================================================
 
 def track_llm_call(model: str = "gpt-4"):
-    """Decorator to auto-track LLM calls
-    
-    Example:
-        @track_llm_call(model="gpt-4")
-        def query_llm(prompt: str) -> str:
-            return openai.ChatCompletion.create(...)["choices"][0]["message"]["content"]
-    """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -425,13 +313,12 @@ def track_llm_call(model: str = "gpt-4"):
         return wrapper
     return decorator
 
+
 def track_cost(model: str = "gpt-4"):
-    """Decorator to track LLM costs"""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
-            # Assumes result is OpenAI response dict
             if isinstance(result, dict) and "usage" in result:
                 cost = CostTracker.calculate_cost(
                     model,
@@ -444,11 +331,7 @@ def track_cost(model: str = "gpt-4"):
         return wrapper
     return decorator
 
-# ============================================================================
-# Initialization
-# ============================================================================
 
 if __name__ == "__main__":
-    # Test setup
     obs = create_observability_client("langfuse")
     logger.info("Observability client initialized successfully")

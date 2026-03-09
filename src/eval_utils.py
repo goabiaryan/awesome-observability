@@ -1,19 +1,3 @@
-"""
-LLM Evaluation Utilities
-Provides unified interface for evaluating LLM responses across multiple frameworks.
-
-Supports:
-- DeepEval (hallucinations, bias, faithfulness, answer relevancy)
-- Ragas (RAG-specific metrics)
-- TruLens (feedback functions)
-
-Usage:
-    from eval_utils import EvalPipeline, evaluate_rag_with_ragas
-    
-    pipeline = EvalPipeline(metrics=["hallucination", "faithfulness"])
-    scores = await pipeline.evaluate(output=response, context=docs, question=q)
-"""
-
 import os
 import json
 import logging
@@ -28,15 +12,11 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# Data Classes
-# ============================================================================
 
 @dataclass
 class EvaluationScore:
-    """Evaluation result with metadata"""
     metric_name: str
-    score: float  # 0-1
+    score: float
     reasoning: Optional[str] = None
     timestamp: str = None
     
@@ -45,7 +25,6 @@ class EvaluationScore:
             self.timestamp = datetime.utcnow().isoformat()
     
     def passed_quality_gate(self, threshold: float = 0.8) -> bool:
-        """Check if score passes minimum quality gate"""
         return self.score >= threshold
     
     def to_dict(self) -> Dict:
@@ -56,9 +35,9 @@ class EvaluationScore:
             "timestamp": self.timestamp
         }
 
+
 @dataclass
 class EvaluationResult:
-    """Complete evaluation result with all metrics"""
     output: str
     context: Optional[str]
     question: Optional[str]
@@ -71,14 +50,12 @@ class EvaluationResult:
     
     @property
     def average_score(self) -> float:
-        """Calculate average score across all metrics"""
         if not self.scores:
             return 0.0
         return sum(s.score for s in self.scores) / len(self.scores)
     
     @property
     def passed_quality_gate(self, threshold: float = 0.8) -> bool:
-        """Check if all metrics pass quality gate"""
         return all(s.passed_quality_gate(threshold) for s in self.scores)
     
     def to_dict(self) -> Dict:
@@ -92,36 +69,20 @@ class EvaluationResult:
             "timestamp": self.timestamp
         }
 
-# ============================================================================
-# Enum for Metrics
-# ============================================================================
 
 class EvaluationMetric(Enum):
-    """Available evaluation metrics"""
-    # Hallucination & Truthfulness
-    HALLUCINATION = "hallucination"  # Is response factually grounded?
-    FAITHFULNESS = "faithfulness"     # Does it match source documents?
-    ANSWER_RELEVANCY = "answer_relevancy"  # Relevant to question? (RAGAS)
-    
-    # Context Quality
-    CONTEXT_PRECISION = "context_precision"  # Is context relevant? (RAGAS)
-    CONTEXT_RECALL = "context_recall"  # All required context retrieved?
-    
-    # Safety & Bias
-    BIAS = "bias"  # Any harmful biases?
-    TOXICITY = "toxicity"  # Is response toxic/harmful?
-    
-    # Semantic
-    COHERENCE = "coherence"  # Is response coherent?
-    COMPLETENESS = "completeness"  # Is answer complete?
+    HALLUCINATION = "hallucination"
+    FAITHFULNESS = "faithfulness"
+    ANSWER_RELEVANCY = "answer_relevancy"
+    CONTEXT_PRECISION = "context_precision"
+    CONTEXT_RECALL = "context_recall"
+    BIAS = "bias"
+    TOXICITY = "toxicity"
+    COHERENCE = "coherence"
+    COMPLETENESS = "completeness"
 
-# ============================================================================
-# DeepEval Integration
-# ============================================================================
 
 class DeepEvalProvider:
-    """DeepEval-based evaluation (50+ metrics)"""
-    
     def __init__(self, model: str = "gpt-4"):
         try:
             from deepeval.metrics import (
@@ -142,7 +103,6 @@ class DeepEvalProvider:
         self.model = model
     
     async def evaluate_hallucination(self, output: str, context: str) -> Tuple[float, str]:
-        """Score hallucination (0-1, where 1 = no hallucination)"""
         try:
             test_case = self.LLMTestCase(
                 output=output,
@@ -157,7 +117,6 @@ class DeepEvalProvider:
             return 0.5, str(e)
     
     async def evaluate_faithfulness(self, output: str, context: str) -> Tuple[float, str]:
-        """Score faithfulness (how well response matches context)"""
         try:
             test_case = self.LLMTestCase(
                 output=output,
@@ -172,7 +131,6 @@ class DeepEvalProvider:
             return 0.5, str(e)
     
     async def evaluate_answer_relevancy(self, output: str, question: str) -> Tuple[float, str]:
-        """Score answer relevancy (RAGAS metric)"""
         try:
             test_case = self.LLMTestCase(
                 output=output,
@@ -187,7 +145,6 @@ class DeepEvalProvider:
             return 0.5, str(e)
     
     async def evaluate_bias(self, output: str) -> Tuple[float, str]:
-        """Score for biases (0-1, where 1 = no bias)"""
         try:
             test_case = self.LLMTestCase(output=output)
             metric = self.Bias(model=self.model)
@@ -198,13 +155,8 @@ class DeepEvalProvider:
             logger.error(f"Bias evaluation failed: {e}")
             return 0.5, str(e)
 
-# ============================================================================
-# Ragas Integration
-# ============================================================================
 
 class RagasProvider:
-    """Ragas-based RAG evaluation"""
-    
     def __init__(self):
         try:
             from ragas.metrics import (
@@ -223,9 +175,7 @@ class RagasProvider:
         answer: str,
         contexts: List[str]
     ) -> Tuple[float, str]:
-        """RAGAS faithfulness (how well answer grounded in contexts)"""
         try:
-            # Ragas expects specific format
             score = await self.faithfulness.async_measure(
                 answer=answer,
                 contexts=contexts
@@ -240,7 +190,6 @@ class RagasProvider:
         answer: str,
         question: str
     ) -> Tuple[float, str]:
-        """RAGAS answer relevancy"""
         try:
             score = await self.answer_relevancy.async_measure(
                 answer=answer,
@@ -257,7 +206,6 @@ class RagasProvider:
         contexts: List[str],
         question: str
     ) -> Tuple[float, str]:
-        """RAGAS context precision (is retrieved context relevant?)"""
         try:
             score = await self.context_precision.async_measure(
                 answer=answer,
@@ -269,13 +217,8 @@ class RagasProvider:
             logger.error(f"Ragas context precision failed: {e}")
             return 0.5, str(e)
 
-# ============================================================================
-# TruLens Integration
-# ============================================================================
 
 class TruLensProvider:
-    """TruLens-based evaluation with feedback functions"""
-    
     def __init__(self):
         try:
             from trulens_eval.feedback import Feedback
@@ -288,7 +231,6 @@ class TruLensProvider:
         self.openai_provider = OpenAIFeedback()
     
     async def evaluate_hallucination(self, output: str, context: str) -> Tuple[float, str]:
-        """TruLens hallucination detection"""
         try:
             feedback = self.Feedback(
                 self.openai_provider.hallucination_free_response
@@ -302,23 +244,8 @@ class TruLensProvider:
             logger.error(f"TruLens hallucination failed: {e}")
             return 0.5, str(e)
 
-# ============================================================================
-# Main Evaluation Pipeline
-# ============================================================================
 
 class EvalPipeline:
-    """Unified evaluation pipeline supporting multiple backends
-    
-    Example:
-        pipeline = EvalPipeline(metrics=["hallucination", "faithfulness"])
-        result = await pipeline.evaluate(
-            output="The answer is 42",
-            context="Answer to life: 42",
-            question="What is the answer?"
-        )
-        print(f"Average score: {result.average_score}")
-    """
-    
     def __init__(
         self,
         metrics: List[str],
@@ -326,20 +253,11 @@ class EvalPipeline:
         model: str = "gpt-4",
         quality_gate_threshold: float = 0.8
     ):
-        """Initialize evaluation pipeline
-        
-        Args:
-            metrics: List of metric names (e.g., ["hallucination", "faithfulness"])
-            backend: "deepeval" | "ragas" | "trulens"
-            model: LLM to use for evaluation (default: gpt-4)
-            quality_gate_threshold: Minimum score to pass QA gate
-        """
         self.metrics = [m.lower() for m in metrics]
         self.backend = backend
         self.model = model
         self.quality_gate_threshold = quality_gate_threshold
         
-        # Initialize provider
         if backend == "deepeval":
             self.provider = DeepEvalProvider(model=model)
         elif backend == "ragas":
@@ -358,20 +276,7 @@ class EvalPipeline:
         question: Optional[str] = None,
         expected_output: Optional[str] = None
     ) -> EvaluationResult:
-        """Evaluate output across configured metrics
-        
-        Args:
-            output: LLM output to evaluate
-            context: Retrieved/source context (for RAG)
-            question: Original question (for relevancy)
-            expected_output: Ground truth answer (optional)
-        
-        Returns:
-            EvaluationResult with all metric scores
-        """
         scores = []
-        
-        # Run evaluations in parallel for speed
         tasks = []
         
         for metric in self.metrics:
@@ -388,7 +293,6 @@ class EvalPipeline:
             else:
                 logger.warning(f"Metric {metric} skipped (missing required params)")
         
-        # Execute all evaluations concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         for result in results:
@@ -405,7 +309,6 @@ class EvalPipeline:
         )
     
     async def _eval_hallucination(self, output: str, context: str) -> EvaluationScore:
-        """Helper: evaluate hallucination"""
         score, reasoning = await self.provider.evaluate_hallucination(output, context)
         return EvaluationScore(
             metric_name="hallucination",
@@ -414,7 +317,6 @@ class EvalPipeline:
         )
     
     async def _eval_faithfulness(self, output: str, context: str) -> EvaluationScore:
-        """Helper: evaluate faithfulness"""
         score, reasoning = await self.provider.evaluate_faithfulness(output, context)
         return EvaluationScore(
             metric_name="faithfulness",
@@ -423,7 +325,6 @@ class EvalPipeline:
         )
     
     async def _eval_answer_relevancy(self, output: str, question: str) -> EvaluationScore:
-        """Helper: evaluate answer relevancy"""
         score, reasoning = await self.provider.evaluate_answer_relevancy(output, question)
         return EvaluationScore(
             metric_name="answer_relevancy",
@@ -437,7 +338,6 @@ class EvalPipeline:
         context: str,
         question: str
     ) -> EvaluationScore:
-        """Helper: evaluate context precision"""
         if self.backend == "ragas":
             score, reasoning = await self.provider.evaluate_context_precision(
                 output, [context], question
@@ -452,7 +352,6 @@ class EvalPipeline:
         )
     
     async def _eval_bias(self, output: str) -> EvaluationScore:
-        """Helper: evaluate bias"""
         score, reasoning = await self.provider.evaluate_bias(output)
         return EvaluationScore(
             metric_name="bias",
@@ -460,26 +359,9 @@ class EvalPipeline:
             reasoning=reasoning
         )
 
-# ============================================================================
-# Hallucination Detection
-# ============================================================================
 
 class HallucinationDetector:
-    """Specialized hallucination detector
-    
-    Example:
-        detector = HallucinationDetector(threshold=0.85)
-        if detector.is_hallucinating(response, context):
-            alert_user("Potential hallucination!")
-    """
-    
     def __init__(self, threshold: float = 0.85, backend: str = "deepeval"):
-        """Initialize detector
-        
-        Args:
-            threshold: Score below this triggers alert (0-1)
-            backend: Evaluation backend to use
-        """
         self.threshold = threshold
         self.backend = backend
         self.pipeline = EvalPipeline(
@@ -488,11 +370,6 @@ class HallucinationDetector:
         )
     
     async def is_hallucinating(self, output: str, context: str) -> bool:
-        """Check if response is hallucinating
-        
-        Returns:
-            True if hallucination risk detected, False otherwise
-        """
         result = await self.pipeline.evaluate(output=output, context=context)
         
         if result.scores:
@@ -501,9 +378,6 @@ class HallucinationDetector:
         
         return False
 
-# ============================================================================
-# Batch Evaluation
-# ============================================================================
 
 async def batch_evaluate_dataset(
     dataset: List[Dict[str, str]],
@@ -511,24 +385,6 @@ async def batch_evaluate_dataset(
     backend: str = "deepeval",
     output_file: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Evaluate entire dataset
-    
-    Args:
-        dataset: List of dicts with keys: output, context, question
-        metrics: List of metrics to evaluate
-        backend: Evaluation backend
-        output_file: Save results to JSON file
-    
-    Returns:
-        Aggregated results with average scores and pass rate
-    
-    Example:
-        dataset = [
-            {"output": "...", "context": "...", "question": "..."},
-            ...
-        ]
-        results = await batch_evaluate_dataset(dataset, ["hallucination", "faithfulness"])
-    """
     pipeline = EvalPipeline(metrics=metrics, backend=backend)
     
     all_results = []
@@ -544,7 +400,6 @@ async def batch_evaluate_dataset(
         
         all_results.append(result.to_dict())
     
-    # Aggregate results
     metric_scores = {}
     for result in all_results:
         for score in result["scores"]:
@@ -568,7 +423,6 @@ async def batch_evaluate_dataset(
             "count": len(scores)
         }
     
-    # Save if requested
     if output_file:
         with open(output_file, "w") as f:
             json.dump({
@@ -579,9 +433,6 @@ async def batch_evaluate_dataset(
     
     return aggregated
 
-# ============================================================================
-# RAG-Specific Evaluation
-# ============================================================================
 
 async def evaluate_rag_with_ragas(
     question: str,
@@ -589,26 +440,6 @@ async def evaluate_rag_with_ragas(
     contexts: List[str],
     ground_truth: Optional[str] = None
 ) -> Dict[str, float]:
-    """Evaluate RAG pipeline with Ragas metrics
-    
-    Args:
-        question: User question
-        answer: Generated answer
-        contexts: Retrieved contexts
-        ground_truth: Expected answer (optional)
-    
-    Returns:
-        Dict with ragas_score, faithfulness, answer_relevancy, etc.
-    
-    Example:
-        result = await evaluate_rag_with_ragas(
-            question="What is RAG?",
-            answer="RAG is Retrieval Augmented Generation",
-            contexts=["RAG combines retrieval with generation..."],
-            ground_truth="Retrieval Augmented Generation"
-        )
-        print(result['ragas_score'])
-    """
     try:
         from ragas.run_config import RunConfig
         from ragas import evaluate
@@ -616,7 +447,6 @@ async def evaluate_rag_with_ragas(
     except ImportError:
         raise ImportError("Install ragas: pip install ragas datasets")
     
-    # Format data for Ragas
     data = {
         "question": [question],
         "answer": [answer],
@@ -626,7 +456,6 @@ async def evaluate_rag_with_ragas(
     
     dataset = Dataset.from_dict(data)
     
-    # Run evaluation
     results = evaluate(
         dataset,
         metrics=[faithfulness, answer_relevancy, context_precision, context_recall]
@@ -640,12 +469,8 @@ async def evaluate_rag_with_ragas(
         "context_recall": results["context_recall"]
     }
 
-# ============================================================================
-# Initialization
-# ============================================================================
 
 if __name__ == "__main__":
-    # Test setup
     async def test():
         pipeline = EvalPipeline(metrics=["hallucination", "faithfulness"])
         result = await pipeline.evaluate(
