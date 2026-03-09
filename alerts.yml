@@ -1,0 +1,323 @@
+# Prometheus Alert Rules for LLM Observability
+# These rules define when to trigger alerts based on metrics
+
+groups:
+  - name: llm_quality_alerts
+    interval: 30s
+    rules:
+      
+      # =====================================================================
+      # Hallucination & Safety Alerts
+      # =====================================================================
+      - alert: HighHallucinationRate
+        expr: llm_hallucination_score < 0.80
+        for: 5m
+        labels:
+          severity: warning
+          component: quality
+        annotations:
+          summary: "High hallucination rate detected (current: {{ $value | humanize }})"
+          description: |
+            LLM hallucination scores have dropped below acceptable threshold.
+            Current score: {{ $value | humanize }}%
+            See Langfuse dashboard for affected requests.
+          dashboard: "http://grafana:3001/d/llm-quality"
+
+      - alert: CriticalHallucinationDetected
+        expr: llm_hallucination_score < 0.50
+        for: 1m
+        labels:
+          severity: critical
+          component: quality
+        annotations:
+          summary: "CRITICAL: Very high hallucination rate ({{ $value | humanize }})"
+          description: |
+            Hallucination scores critically low. Immediate investigation required.
+            Consider rolling back recent model changes or disabling auto-generation.
+
+      # =====================================================================
+      # Answer Relevancy Alerts (RAGAS metrics)
+      # =====================================================================
+      - alert: LowAnswerRelevancy
+        expr: llm_answer_relevancy_score < 0.75
+        for: 10m
+        labels:
+          severity: warning
+          component: quality
+        annotations:
+          summary: "Answer relevancy below threshold ({{ $value | humanize }})"
+          description: |
+            Generated answers are not sufficiently relevant to user questions.
+            This may indicate issues with:
+            - Retrieval quality (RAG)
+            - Prompt engineering
+            - Model fine-tuning
+          dashboard: "http://grafana:3001/d/rag-metrics"
+
+      # =====================================================================
+      # Cost & Performance Alerts
+      # =====================================================================
+      - alert: CostSpike
+        expr: rate(llm_cost_total[5m]) > 100
+        labels:
+          severity: warning
+          component: cost
+        annotations:
+          summary: "Unexpected cost spike: ${{ $value | humanize }}/min"
+          description: |
+            LLM API costs have spiked significantly.
+            Current rate: ${{ $value | humanize }}/minute
+            Possible causes:
+            - Looping agent calls
+            - Increased user traffic
+            - Model switch to more expensive variant
+          dashboard: "http://grafana:3001/d/llm-costs"
+
+      - alert: DailyBudgetExceeded
+        expr: llm_cost_total > 5000  # Adjust threshold as needed
+        for: 1h
+        labels:
+          severity: critical
+          component: cost
+        annotations:
+          summary: "Daily LLM budget exceeded: ${{ $value | humanize }}"
+          description: |
+            Total daily costs have exceeded budget threshold of $5000.
+            Immediate cost control measures may be needed.
+
+      - alert: HighLatencyP99
+        expr: histogram_quantile(0.99, rate(llm_latency_seconds_bucket[5m])) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "P99 latency exceeds 5s (current: {{ $value | humanize }}s)"
+          description: |
+            95th percentile of LLM request latency is very high.
+            This will degrade user experience.
+            Investigate:
+            - API provider status
+            - Token limits
+            - Model inference time
+
+      - alert: TokenLimitApproaching
+        expr: rate(llm_tokens_total[5m]) > 8000  # Adjust based on rate limits
+        for: 15m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High token usage rate: {{ $value | humanize }} tokens/min"
+          description: |
+            Token consumption rate is approaching rate limits.
+            This may cause request throttling or errors.
+            Recommended actions:
+            - Implement request batching
+            - Reduce context window sizes
+            - Enable response caching
+
+      # =====================================================================
+      # System & Reliability Alerts
+      # =====================================================================
+      - alert: HighErrorRate
+        expr: rate(llm_errors_total[5m]) > 0.05  # >5% error rate
+        for: 5m
+        labels:
+          severity: warning
+          component: reliability
+        annotations:
+          summary: "High error rate: {{ $value | humanizePercentage }}"
+          description: |
+            More than 5% of LLM requests are failing.
+            Error types: {{ $labels.error_type }}
+            Check logs for details.
+
+      - alert: APIProviderOutage
+        expr: rate(llm_errors_total{error_type=~".*Unavailable.*"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          component: external
+        annotations:
+          summary: "Possible API provider outage ({{ $labels.error_type }})"
+          description: |
+            Receiving service unavailable errors from LLM provider.
+            Check provider status page immediately.
+
+      - alert: LangfuseDown
+        expr: up{job="langfuse"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Langfuse observability system is down"
+          description: |
+            Cannot reach Langfuse. Observability data is not being collected.
+            Check Langfuse container health and database connectivity.
+
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Prometheus metrics collection is down"
+          description: "Cannot collect metrics. Metrics will have gaps in data."
+
+      # =====================================================================
+      # Quality Gate Alerts
+      # =====================================================================
+      - alert: QualityGatePassRateLow
+        expr: llm_quality_gate_pass_rate < 0.80
+        for: 20m
+        labels:
+          severity: warning
+          component: quality
+        annotations:
+          summary: "Quality gate pass rate below 80% (current: {{ $value | humanizePercentage }})"
+          description: |
+            Less than 80% of requests are passing quality gates.
+            This indicates widespread quality issues.
+            Investigate all quality metrics:
+            - Hallucination score
+            - Answer relevancy
+            - Context precision
+
+      # =====================================================================
+      # Agent-Specific Alerts
+      # =====================================================================
+      - alert: AgentMaxIterationsReached
+        expr: rate(llm_agent_max_iterations_exceeded[5m]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          component: agents
+        annotations:
+          summary: "Agents frequently hitting iteration limits"
+          description: |
+            Agents are reaching maximum iteration counts.
+            This suggests:
+            - Agent loops are too long
+            - Termination conditions are too strict
+            - Problem complexity is increasing
+
+      - alert: AgentTokenBudgetExceeded
+        expr: rate(llm_agent_token_budget_exceeded[5m]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          component: agents
+        annotations:
+          summary: "Agent token budgets being exceeded"
+          description: "Agents are consuming more tokens than allocated budget."
+
+  # =====================================================================
+  # Drift Detection Alerts (requires Arize Phoenix)
+  # =====================================================================
+  - name: llm_drift_alerts
+    rules:
+      
+      - alert: EmbeddingDriftDetected
+        expr: llm_embedding_drift_score > 0.3
+        for: 1h
+        labels:
+          severity: warning
+          component: drift
+        annotations:
+          summary: "Embedding distribution drift detected (score: {{ $value | humanize }})"
+          description: |
+            Embedding distributions have shifted significantly over time.
+            This may indicate:
+            - Data distribution change
+            - Model degradation
+            - Domain shift
+            See Arize Phoenix for drift visualization.
+
+      - alert: FeatureDriftDetected
+        expr: increase(llm_feature_drift_alerts[1h]) > 0
+        labels:
+          severity: warning
+          component: drift
+        annotations:
+          summary: "Feature drift detected in feature: {{ $labels.feature_name }}"
+          description: |
+            Detected statistical distribution change for {{ $labels.feature_name }}.
+            Investigation recommended.
+
+      - alert: PredictionDriftDetected
+        expr: llm_prediction_drift_score > 0.25
+        for: 2h
+        labels:
+          severity: warning
+          component: drift
+        annotations:
+          summary: "Output distribution drift (score: {{ $value | humanize }})"
+          description: |
+            LLM outputs are drifting from historical patterns.
+            Model retraining may be needed.
+
+  # =====================================================================
+  # SLA Monitoring Alerts
+  # =====================================================================
+  - name: llm_sla_alerts
+    rules:
+      
+      - alert: SLA_AvailabilityBreach
+        expr: |
+          (1 - (rate(llm_errors_total[5m:]) / rate(llm_requests_total[5m:]) ) ) < 0.99
+        for: 30m
+        labels:
+          severity: critical
+          sla_target: "99%"
+        annotations:
+          summary: "SLA availability BREACH ({{ $value | humanizePercentage }})"
+          description: "Availability fallen below 99% SLA target for 30 minutes."
+
+      - alert: SLA_LatencyBreach
+        expr: |
+          histogram_quantile(0.95, rate(llm_latency_seconds_bucket[5m])) > 3
+        for: 30m
+        labels:
+          severity: warning
+          sla_target: "P95 < 3s"
+        annotations:
+          summary: "SLA latency BREACH (P95: {{ $value | humanize }}s)"
+          description: "P95 latency exceeded 3s SLA target."
+
+      - alert: SLA_QualityBreach
+        expr: llm_hallucination_score < 0.85
+        for: 1h
+        labels:
+          severity: warning
+          sla_target: "hallucination_score >= 0.85"
+        annotations:
+          summary: "SLA quality BREACH (hallucination: {{ $value | humanize }})"
+          description: "Quality metrics below SLA threshold."
+
+# ============================================================================
+# Alert Implementation Notes:
+# ============================================================================
+#
+# 1. Integrate with Alertmanager for routing:
+#    - Configure Slack/PagerDuty/Email notifications
+#    - Set up alert grouping and deduplication
+#    - Define escalation policies
+#
+# 2. Adjust thresholds based on your specific needs:
+#    - Cost thresholds depend on your budget
+#    - Quality thresholds depend on your acceptable latency/error rate
+#    - Error rate thresholds vary by SLA commitments
+#
+# 3. Dashboard setup:
+#    - Create custom Grafana dashboards for each alert
+#    - Include historical context and runbook links
+#    - Add manual remediation steps
+#
+# 4. Post-mortem process:
+#    - Log alert trigger events to track incident frequency
+#    - Review false positives and adjust thresholds
+#    - Document root causes and preventive measures
+#
+# ============================================================================

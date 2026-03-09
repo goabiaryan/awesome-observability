@@ -1,0 +1,393 @@
+version: '3.8'
+
+services:
+  # =========================================================================
+  # SigNoz - Primary OTLP Backend for Agent Tracing
+  # =========================================================================
+  signoz-otel-collector:
+    image: signoz/signoz-otel-collector:latest
+    container_name: signoz-otel-collector
+    command:
+      - "--config=/etc/otel-collector-config.yaml"
+    environment:
+      - GOGC=80
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "14250:14250"
+    volumes:
+      - ./signoz-otel-config.yaml:/etc/otel-collector-config.yaml
+    depends_on:
+      - clickhouse
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=SigNoz OpenTelemetry Collector (OTLP Receiver)"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    environment:
+      - CLICKHOUSE_DB=signoz
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.example.description=ClickHouse Database for SigNoz"
+
+  signoz:
+    image: signoz/signoz:latest
+    container_name: signoz
+    depends_on:
+      - signoz-otel-collector
+      - clickhouse
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4317
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+    ports:
+      - "3301:3301"
+    volumes:
+      - signoz_data:/var/lib/signoz
+    networks:
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3301/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.example.description=SigNoz UI - Trace & Metrics Visualization"
+      - "com.example.port=3301"
+
+  # =========================================================================
+  # PostgreSQL - Database for Langfuse (Optional)
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse_password_change_this
+      POSTGRES_DB: langfuse
+      POSTGRES_INITDB_ARGS: "-c max_connections=100"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Langfuse PostgreSQL database"
+
+  # =========================================================================
+  # Langfuse - All-in-one LLM observability
+  # =========================================================================
+  langfuse:
+    image: ghcr.io/langfuse/langfuse:latest
+    container_name: langfuse
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DATABASE_URL: "postgresql://langfuse:langfuse_password_change_this@postgres:5432/langfuse"
+      
+      # Auth configuration (change these!)
+      # Generate secure secrets: openssl rand -hex 32
+      NEXTAUTH_SECRET: "your-secure-secret-key-change-this-please-8a9b"
+      NEXTAUTH_URL: "http://localhost:3000"
+      SALT: "your-secure-salt-change-this-please"
+      
+      # Optional: Email configuration
+      # EMAIL_FROM_ADDRESS: "noreply@example.com"
+      # SMTP_HOST: "smtp.gmail.com"
+      # SMTP_PORT: "587"
+      # SMTP_USER: "your-email@gmail.com"
+      # SMTP_PASSWORD: "your-app-password"
+      
+      # Optional: API rate limiting
+      # LANGFUSE_RATE_LIMIT_ENABLED: "true"
+      # LANGFUSE_RATE_LIMIT_REQUESTS: "10000"
+      # LANGFUSE_RATE_LIMIT_WINDOW: "60"
+      
+      # Logging
+      LOG_LEVEL: "info"
+    ports:
+      - "3000:3000"
+    volumes:
+      - langfuse_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Langfuse - LLM Observability Platform"
+      - "com.example.port=3000"
+
+  # =========================================================================
+  # Prometheus - Metrics Collection
+  # =========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Prometheus - Metrics Database"
+      - "com.example.port=9090"
+
+  # =========================================================================
+  # Grafana - Visualization & Dashboards
+  # =========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      # Admin credentials (change these!)
+      GF_SECURITY_ADMIN_PASSWORD: admin_change_this
+      GF_SECURITY_ADMIN_USER: admin
+      
+      # Optional: LDAP, SAML, OAuth setup
+      # GF_AUTH_PROXY_ENABLED: "true"
+      # GF_AUTH_PROXY_HEADER_NAME: "X-REMOTE-USER"
+      
+      # Data retention
+      GF_ALERTING_RETENTION: "720h"
+      
+      # Optional: Anonymous access (for demos)
+      # GF_AUTH_ANONYMOUS_ENABLED: "true"
+      # GF_AUTH_ANONYMOUS_ORG_NAME: "Public"
+      # GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Grafana - Visualization & Alerting"
+      - "com.example.port=3001"
+
+  # =========================================================================
+  # Jaeger - Distributed Tracing (Optional)
+  # =========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+      SAMPLER_TYPE: "const"
+      SAMPLER_PARAM: "1"
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Jaeger - Distributed Tracing"
+      - "com.example.port=16686"
+
+  # =========================================================================
+  # Redis - Caching & Sessions (Optional but recommended)
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - observability
+    restart: unless-stopped
+    labels:
+      - "com.example.description=Redis - Caching Layer"
+      - "com.example.port=6379"
+
+  # =========================================================================
+  # Your LLM Application (Example)
+  # =========================================================================
+  # Uncomment and configure if you want to deploy your app alongside observability
+  # 
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: llm-app
+  #   depends_on:
+  #     - langfuse
+  #     - prometheus
+  #     - redis
+  #   environment:
+  #     # Observability
+  #     LANGFUSE_HOST: "http://langfuse:3000"
+  #     LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+  #     LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+  #     
+  #     # Redis
+  #     REDIS_URL: "redis://redis:6379"
+  #     
+  #     # OpenAI / LLM APIs
+  #     OPENAI_API_KEY: ${OPENAI_API_KEY}
+  #     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  #     
+  #     # Application
+  #     LOG_LEVEL: "info"
+  #     ENVIRONMENT: "production"
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ./src:/app/src
+  #     - ./logs:/app/logs
+  #   networks:
+  #     - observability
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+# =========================================================================
+# Networks
+# =========================================================================
+networks:
+  observability:
+    driver: bridge
+
+# =========================================================================
+# Volumes (Persistent Data)
+# =========================================================================
+volumes:
+  signoz_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  langfuse_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =========================================================================
+# Quick Start Commands:
+# =========================================================================
+#
+# Start all services:
+#   docker-compose up -d
+#
+# Check status:
+#   docker-compose ps
+#
+# View logs:
+#   docker-compose logs -f signoz
+#   docker-compose logs -f langfuse
+#   docker-compose logs -f grafana
+#
+# Access URLs:
+#   - SigNoz (OTLP Backend): http://localhost:3301
+#   - Langfuse: http://localhost:3000 (admin/change-me)
+#   - Grafana: http://localhost:3001 (admin/admin_change_this)
+#   - Prometheus: http://localhost:9090
+#   - Jaeger: http://localhost:16686
+#   - OTLP Endpoint: localhost:4317
+#
+# Shutdown:
+#   docker-compose down
+#
+# Full cleanup:
+#   docker-compose down -v
+#
+# =========================================================================
+# Security Notes:
+# =========================================================================
+# 1. Change all default passwords in environment variables
+# 2. Use .env file for production secrets (not version control)
+# 3. Set up reverse proxy (nginx) with SSL for production
+# 4. Enable authentication & RBAC in Grafana
+# 5. Restrict network access for PostgreSQL (don't expose port 5432 publicly)
+# 6. Use Docker secrets for sensitive values in production
+# 7. Regularly backup PostgreSQL volumes
+# 8. Monitor resource usage and set memory limits
+# 9. Use read-only root filesystem where possible
+# 10. Run containers as non-root user
+#
+# =========================================================================
+# Production Checklist:
+# =========================================================================
+# [ ] Change all NEXTAUTH_SECRET, SALT, admin passwords
+# [ ] Set up persistent volumes on production host
+# [ ] Configure SSL/TLS with reverse proxy
+# [ ] Set resource limits (mem_limit, cpus)
+# [ ] Configure logging drivers (json-file with size limits)
+# [ ] Set up backup strategy for PostgreSQL
+# [ ] Configure log aggregation (ELK, Splunk, etc.)
+# [ ] Enable Prometheus remote storage for long-term metrics
+# [ ] Set up alerting rules and notification channels
+# [ ] Test disaster recovery and restore procedures
+# [ ] Document custom dashboard and alert configurations
+#

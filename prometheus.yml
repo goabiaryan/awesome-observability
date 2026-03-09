@@ -1,0 +1,106 @@
+# Prometheus Configuration for LLM Observability
+# This scrapes metrics from your LLM application and Languuse
+
+global:
+  scrape_interval: 15s        # Scrape metrics every 15 seconds
+  evaluation_interval: 15s    # Evaluate rules every 15 seconds
+  external_labels:
+    monitor: 'llm-observability'
+    environment: 'production'
+
+# ============================================================================
+# Alertmanager Configuration
+# ============================================================================
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - 'alertmanager:9093'
+
+# ============================================================================
+# Rule Files
+# ============================================================================
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# ============================================================================
+# Scrape Configurations
+# ============================================================================
+scrape_configs:
+  
+  # Prometheus self-scraping
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # =========================================================================
+  # Langfuse Application Metrics
+  # =========================================================================
+  - job_name: 'langfuse'
+    static_configs:
+      - targets: ['langfuse:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'langfuse-main'
+
+  # =========================================================================
+  # Your LLM Application (if deployed)
+  # =========================================================================
+  - job_name: 'llm-app'
+    static_configs:
+      - targets: ['app:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'llm-application'
+
+  # =========================================================================
+  # Jaeger Metrics
+  # =========================================================================
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+    scrape_interval: 15s
+
+  # =========================================================================
+  # Node Exporter (System Metrics) - Optional
+  # =========================================================================
+  # Uncomment if you have node-exporter running
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+
+  # =========================================================================
+  # Docker Container Metrics - Optional
+  # =========================================================================
+  # Uncomment if you have cadvisor running
+  # - job_name: 'cadvisor'
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
+
+  # =========================================================================
+  # Service Discovery (Kubernetes) - For cluster deployments
+  # =========================================================================
+  # kubernetes_sd_configs:
+  #   - role: pod
+  # relabel_configs:
+  #   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #     action: keep
+  #     regex: true
+  #   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #     action: replace
+  #     target_label: __metrics_path__
+  #     regex: (.+)
+  #   - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+  #     action: replace
+  #     regex: ([^:]+)(?::\d+)?;(\d+)
+  #     replacement: $1:$2
+  #     target_label: __address__

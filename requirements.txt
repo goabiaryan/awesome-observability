@@ -1,0 +1,222 @@
+# ============================================================================
+# LLM Observability & Monitoring - Production Requirements
+# ============================================================================
+# Updated: March 2026
+# This file contains all dependencies for production-grade LLM observability
+
+# ============================================================================
+# Core Tracing & Observability (abidex-first)
+# ============================================================================
+
+abidex>=0.3.0
+
+langfuse>=2.26.0
+
+arize-phoenix>=4.2.0
+arize-phoenix-otel>=1.0.0
+
+opentelemetry-api>=1.21.0
+opentelemetry-sdk>=1.21.0
+opentelemetry-exporter-otlp>=0.40b0
+opentelemetry-exporter-prometheus>=0.42b0
+opentelemetry-instrumentation>=0.40b0
+opentelemetry-instrumentation-openai>=0.2.0
+opentelemetry-instrumentation-langchain>=0.1.0
+opentelemetry-instrumentation-requests>=0.40b0
+opentelemetry-instrumentation-httpx>=0.40b0
+
+prometheus-client>=0.20.0
+
+# ============================================================================
+# OTLP Backends (for abidex trace export)
+# ============================================================================
+
+signoz-python-sdk>=0.1.0
+
+uptrace>=1.22.0
+
+jaeger-client>=4.8.0
+
+# ============================================================================
+# Evaluation Frameworks (Production-Ready)
+# ============================================================================
+
+deepeval>=1.5.0
+
+ragas>=0.1.10
+
+tru-lens>=0.15.0
+
+datasets>=2.15.0
+evaluate>=0.4.1
+
+# ============================================================================
+# Agent Frameworks (Multi-Agent Orchestration)
+# ============================================================================
+
+crewai>=0.30.0
+
+langgraph>=0.0.50
+
+# ============================================================================
+# LLM Frameworks & Integrations
+# ============================================================================
+
+# LangChain - Agent & chain orchestration
+langchain>=0.2.0
+langchain-core>=0.1.0
+langchain-openai>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-community>=0.0.20
+
+# LlamaIndex - RAG & knowledge base integration
+llama-index>=0.10.0
+llama-index-core>=0.1.0
+llama-index-llms-openai>=0.1.0
+llama-index-vector-stores-pinecone>=0.1.0
+
+# ============================================================================
+# LLM Provider SDKs
+# ============================================================================
+
+openai>=1.30.0
+tiktoken>=0.5.1
+
+anthropic>=0.28.0
+
+google-generativeai>=0.4.0
+cohere>=5.3.0
+
+# ============================================================================
+# Cost & Latency Tracking
+# ============================================================================
+
+helicone>=1.0.0
+
+# ============================================================================
+# Web & API Frameworks
+# ============================================================================
+
+# FastAPI - High-performance API framework
+fastapi>=0.104.0
+starlette>=0.27.0
+uvicorn[standard]>=0.24.0
+
+# Streamlit - Interactive dashboards (for dev/demo)
+streamlit>=1.28.0
+
+# ============================================================================
+# Data & Computation
+# ============================================================================
+
+# Data manipulation
+pandas>=2.1.0
+numpy>=1.24.0
+polars>=0.20.0  # Fast DataFrame ops
+
+# Embeddings & vectors
+scikit-learn>=1.3.0
+sentence-transformers>=2.2.0  # For embedding models
+faiss-cpu>=1.7.4  # Vector similarity search
+
+# ============================================================================
+# Databases & Storage
+# ============================================================================
+
+# PostgreSQL (for Langfuse backend)
+psycopg[binary]>=3.1.0
+sqlalchemy>=2.0.0
+
+# Redis (for caching & sessions)
+redis>=5.0.0
+
+# ============================================================================
+# Configuration & Utilities
+# ============================================================================
+
+# Environment management
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+
+# Logging & structured output
+structlog>=23.1.0
+python-json-logger>=2.0.0
+
+# Async utilities
+httpx>=0.25.0
+aiohttp>=3.9.0
+asyncio-contextmanager>=1.0.0
+
+# ============================================================================
+# Monitoring & Metrics
+# ============================================================================
+
+# APM & distributed tracing
+jaeger-client>=4.8.0  # For Jaeger integration (optional)
+
+# ============================================================================
+# Testing
+# ============================================================================
+
+# Testing frameworks
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Test utilities
+faker>=21.0.0
+factory-boy>=3.3.0
+
+# ============================================================================
+# Development
+# ============================================================================
+
+# Code quality
+black>=23.10.0
+isort>=5.12.0
+flake8>=6.1.0
+pylint>=3.0.0
+mypy>=1.7.0
+
+# Type stubs
+types-requests>=2.31.0
+types-aiofiles>=23.2.0
+
+# Pre-commit hooks
+pre-commit>=3.5.0
+
+# ============================================================================
+# Optional: Advanced Observability
+# ============================================================================
+
+# Datadog (for cloud observability - requires Datadog account)
+# datadog-api-client>=1.28.0
+# datadog-lambda>=10.0.0
+
+# New Relic (alternative cloud observability)
+# newrelic>=9.0.0
+
+# Splunk (enterprise logging)
+# splunk-opentelemetry>=0.43b0
+
+# ============================================================================
+# Optional: Advanced Evaluation
+# ============================================================================
+
+# ARES - Query-aware RAG evaluation
+# ares-py>=0.1.0
+
+# LMShowing - Evaluation tools
+# lmshowing>=0.1.0
+
+# ============================================================================
+# Version Constraints
+# ============================================================================
+# Python version requirement
+# This package requires Python 3.9 or later
+
+# Note: Some packages have conflicting version requirements
+# If you encounter conflicts, try installing in this order:
+# 1. pip install -r requirements.txt --no-deps
+# 2. Manual resolution may be needed for your specific use case
