@@ -47,6 +47,7 @@ A *production-grade starter kit* for LLM observability, agent monitoring, and ev
 - [Arize Phoenix](https://github.com/Arize-ai/phoenix) - Evaluation + drift detection
 - [Helicone](https://helicone.ai) - Cost proxy for OpenAI/Anthropic
 - [Braintrust](https://www.braintrust.dev) - Evals + experiments + collaboration
+- [Nexus](https://nexus.keylightdigital.dev) - Lightweight AI agent observability: trace viewer, span timeline, cost tracking, alerts. Free tier: 1K traces/month. Python + JS SDKs.
 
 #### Evaluation Frameworks
 - [DeepEval](https://github.com/confident-ai/deepeval) - 50+ metrics (hallucination, bias, faithfulness)
