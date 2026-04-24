@@ -113,6 +113,7 @@ awesome-observability/
 ├── configs/                     # Configuration templates
 │   ├── .env.template           # Environment variables template
 │   └── grafana-dashboard.json  # Pre-built Grafana dashboard
+- [KubeStellar Console](https://github.com/kubestellar/console) - Multi-cluster Kubernetes dashboard with AI-powered operations, real-time observability, and CNCF project integrations across edge and cloud clusters.
 │
 └── tests/                       # Test suite (if included)
 ```
