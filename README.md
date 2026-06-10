@@ -44,6 +44,7 @@ A *production-grade starter kit* for LLM observability, agent monitoring, and ev
 
 #### Tracing & Observability
 - [Langfuse](https://langfuse.com) - Prompt management + evals + sessions
+- [Tuning Engines](https://www.tuningengines.com/) - AI control and evidence plane for governed model, MCP, skill, workflow, policy, approval, state-reference, and outcome traces with cost analytics.
 - [Arize Phoenix](https://github.com/Arize-ai/phoenix) - Evaluation + drift detection
 - [Helicone](https://helicone.ai) - Cost proxy for OpenAI/Anthropic
 - [Braintrust](https://www.braintrust.dev) - Evals + experiments + collaboration
