@@ -57,6 +57,7 @@ A *production-grade starter kit* for LLM observability, agent monitoring, and ev
 
 #### Cost & Metrics
 - [Helicone](https://helicone.ai) - Cost tracking (proxy-based)
+- [agenttrace](https://github.com/luoyuctl/agenttrace) - Local-first TUI and report generator for AI coding-agent logs, token usage, estimated cost, latency, and session health
 - [Token Counter](https://github.com/openai/tiktoken) - Token counting
 - [Prometheus](https://prometheus.io) - Metrics collection
 - [Grafana](https://grafana.com) - Visualization & alerting
