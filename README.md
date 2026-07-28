@@ -54,6 +54,7 @@ A *production-grade starter kit* for LLM observability, agent monitoring, and ev
 - [Ragas](https://github.com/explodinggradients/ragas) - RAG evaluation metrics
 - [TruLens](https://www.trulens.org/) - Feedback functions & explainability
 - [ARES](https://github.com/stanford-futuredata/ares) - Query optimizer for RAG
+- [ClawBench](https://github.com/TIGER-AI-Lab/ClawBench) - Live-web benchmark for browser and computer-use agents covering 283 tasks across 163 websites, with request interception and five execution-evidence layers. See the [paper](https://arxiv.org/abs/2604.08523) and [project site](https://claw-bench.com/).
 
 #### Cost & Metrics
 - [Helicone](https://helicone.ai) - Cost tracking (proxy-based)
